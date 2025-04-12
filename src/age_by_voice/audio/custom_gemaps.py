@@ -29,5 +29,7 @@ class Custom_GeMAPS:
             raise NotImplementedError(
                 "Custom GeMAPS feature extraction only supports mono audio files."
             )
+        if self._audio_path is None or "":
+            raise ValueError("Audio path cannot be None or empty.")
 
         self.y, self.sr = librosa.load(self._audio_path, sr=self.sr, mono=self._mono)
