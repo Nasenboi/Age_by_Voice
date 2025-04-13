@@ -1,12 +1,14 @@
 from pydantic import BaseModel
 from typing import Optional, Union
 from opensmile import FeatureSet, FeatureLevel
-
+import pandas as pd
 
 FEATURE_SET = FeatureSet.eGeMAPSv02
 FEATURE_LEVEL = FeatureLevel.Functionals
 
 
+# Replaced any "." with "_" in the feature names
+# F0semitoneFrom27.5Hz<...> with F0semitoneFrom27_5Hz<...>
 class FeaturesModel(BaseModel):
     clip_id: Union[str, int]
     F0semitoneFrom27_5Hz_sma3nz_amean: Optional[float]
@@ -97,3 +99,24 @@ class FeaturesModel(BaseModel):
     MeanUnvoicedSegmentLength: Optional[float]
     StddevUnvoicedSegmentLength: Optional[float]
     equivalentSoundLevel_dBp: Optional[float]
+
+
+def parse_features(df, clip_id: Union[str, int]) -> FeaturesModel:
+    """
+    Parses a dataframe to create a FeaturesModel instance.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the smile feature set with original "." in the names.
+        clip_id (Union[str, int]): The clip ID to associate with the FeaturesModel.
+
+    Returns:
+        FeaturesModel: An instance of FeaturesModel populated with the parsed data.
+    """
+    # Map the dataframe columns to the FeaturesModel attributes
+    feature_data = {
+        col.replace(".", "_"): df[col].iloc[0] if col in df.columns else None
+        for col in FeaturesModel.model_fields.keys()
+    }
+    feature_data["clip_id"] = clip_id
+
+    return FeaturesModel(**feature_data)
