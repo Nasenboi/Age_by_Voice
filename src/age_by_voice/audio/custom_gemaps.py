@@ -1,10 +1,12 @@
 import os
 import numpy as np
+import pandas as pd
 import librosa
 import scipy.signal as sp
 import soundfile as sf
 import parselmouth
-
+from parselmouth.praat import call
+import opensmile
 
 GeMAPS_Settings = {
     "AVERAGING_FILTER_LENGTH": 3,
@@ -12,9 +14,8 @@ GeMAPS_Settings = {
     "WINDOW_SIZE_SHORT": 0.020,
     "DEFAULT_HOP_SIZE": 0.010,
     "GAUSSIAN_WINDOW_STD": 0.04,
-    "F0_START": 27.5,
-    "F0_MIN": 50,
-    "F0_MAX": 1000,
+    "F0_START": 27,
+    "F0_END": 1_000,
     "ALPHA_RATIO_LOW": (50, 1_000),
     "ALPHA_RATIO_HIGH": (1_000, 5_000),
     "HAMMERBERG_INDEX_LOW": (0, 2_000),
@@ -66,6 +67,19 @@ class Custom_GeMAPS:
             subtype="PCM_24",
         )
         self._sound: parselmouth.Sound = parselmouth.Sound(self._temp_file_name)
+        self._pitch = call(
+            self._sound,
+            "To Pitch",
+            0.0,
+            GeMAPS_Settings["F0_START"],
+            GeMAPS_Settings["F0_END"],
+        )
+        self._point_process = call(
+            self._sound,
+            "To PointProcess (periodic, cc)",
+            GeMAPS_Settings["F0_START"],
+            GeMAPS_Settings["F0_END"],
+        )
 
     def __del__(self):
         """
@@ -131,6 +145,20 @@ class Custom_GeMAPS:
     Public methods.
     These methods you can use to extract features from the audio signal.
     """
+
+    def smile(self) -> pd.DataFrame:
+        """
+        Extract the voice features using the original OpenSMILE GeMAPS algorithm.
+        This is only for comparison purposes.
+        Returns:
+            dict: A dictionary containing the extracted voice features.
+        """
+        smile = opensmile.Smile(
+            feature_set=opensmile.FeatureSet.eGeMAPSv02,
+            feature_level=opensmile.FeatureLevel.Functionals,
+        )
+        processed_signal = smile.process_signal(self.y, self.sr)
+        return processed_signal
 
     def dft(self, ts: float = 0.0, log_values: bool = False) -> np.ndarray:
         """
@@ -202,50 +230,19 @@ class Custom_GeMAPS:
 
     def f0(self) -> dict:
         """
-        Calculate the fundamental frequency (F0) for each frame using librosa's piptrack.
-        Notice that the original GeMAPS uses the SHS algorithm.
-        To simplify the code, another algorithm is used here, librosas piptrack uses Parabolic Interpolation.
-        This way the F0 is calculated in a more rudamentary and rougher way than in the original GeMAPS.
+        Calculate the fundamental frequency (F0) for each frame using the pre-calculated pitch.
         Smooth the F0 values and compute the mean and standard deviation for the entire audio segment.
         Returns:
             dict: A dictionary containing the smoothed F0 values, mean, and standard deviation.
         """
-        # Define the hop length and frame length
-        hop_length = int(GeMAPS_Settings["DEFAULT_HOP_SIZE"] * self.sr)
-        win_length = int(GeMAPS_Settings["WINDOW_SIZE_LONG"] * self.sr)
-        fmin = GeMAPS_Settings["F0_MIN"]
-        fmax = GeMAPS_Settings["F0_MAX"]
-
-        # Use librosa's piptrack to estimate F0
-        pitches, magnitudes = librosa.piptrack(
-            y=self.y,
-            sr=self.sr,
-            win_length=win_length,
-            hop_length=hop_length,
-            fmin=fmin,
-            fmax=fmax,
-        )
-
-        # Extract F0 values for each frame
-        f0_values = []
-        for i in range(pitches.shape[1]):
-            pitch_frame = pitches[:, i]
-            magnitude_frame = magnitudes[:, i]
-            max_idx = np.argmax(magnitude_frame)
-            f0 = pitch_frame[max_idx] if magnitude_frame[max_idx] > 0 else 0
-            voicing_prob = magnitude_frame[max_idx] / (np.mean(magnitude_frame) + 1e-10)
-            if voicing_prob < 0.7:
-                f0 = 0
-
-            f0_values.append(f0)
-
-        # Smooth and calculate statistics for F0 values
-        stats = self._smooth_and_calculate_stats(np.array(f0_values), ignore_zero=True)
+        unit = "Hertz"
+        meanF0 = call(self._pitch, "Get mean", 0, 0, unit)
+        stdevF0 = call(self._pitch, "Get standard deviation", 0, 0, unit)
 
         return {
-            "smoothed_f0_values": stats["smoothed_data"].tolist(),
-            "mean": stats["mean"],
-            "std": stats["std"],
+            "pitch": self._pitch,
+            "f0_mean": meanF0,
+            "f0_stddev": stdevF0,
         }
 
     def jitter(
@@ -257,23 +254,12 @@ class Custom_GeMAPS:
         maximum_period_factor: float = 1.3,
     ) -> dict:
         """
-        Calculate jitter (frequency perturbation) for the audio signal using the parselmouth library.
-        The original GeMAPS uses the SHS algorithm again, as above.
-        We use the praat library to simplify the code and calculations.
+        Calculate jitter (frequency perturbation) for the audio signal using the pre-calculated point process.
         Returns:
-            dict: A dictionary containing the jitter local, jitter local absolute, jitter rap, and jitter ppq5.
+            dict: A dictionary containing the jitter local, jitter local absolute, and jitter rap.
         """
-
-        point_process = parselmouth.praat.call(
-            self._sound,
-            "To PointProcess (periodic, cc)",
-            GeMAPS_Settings["F0_MIN"],
-            GeMAPS_Settings["F0_MAX"],
-        )
-
-        # calculate the jitter over time
-        jitter_local = parselmouth.praat.call(
-            point_process,
+        jitter_local = call(
+            self._point_process,
             "Get jitter (local)",
             time_range_start,
             time_range_end,
@@ -282,8 +268,8 @@ class Custom_GeMAPS:
             maximum_period_factor,
         )
 
-        localabsoluteJitter = parselmouth.praat.call(
-            point_process,
+        localabsoluteJitter = call(
+            self._point_process,
             "Get jitter (local, absolute)",
             time_range_start,
             time_range_end,
@@ -291,8 +277,8 @@ class Custom_GeMAPS:
             period_ceiling,
             maximum_period_factor,
         )
-        rapJitter = parselmouth.praat.call(
-            point_process,
+        rapJitter = call(
+            self._point_process,
             "Get jitter (rap)",
             time_range_start,
             time_range_end,
@@ -305,4 +291,46 @@ class Custom_GeMAPS:
             "jitter_local": jitter_local,
             "jitter_local_absolute": localabsoluteJitter,
             "jitter_rap": rapJitter,
+        }
+
+    def shimmer(
+        self,
+        time_range_start: float = 0.0,
+        time_range_end: float = 0.0,  # if 0.0, use the whole audio
+        period_floor: float = 0.0001,
+        period_ceiling: float = 0.02,
+        maximum_period_factor: float = 1.3,
+        maximum_amplitude_factor: float = 1.6,
+    ) -> dict:
+        """
+        Calculate shimmer (amplitude perturbation) for the audio signal using the parselmouth library.
+        The original GeMAPS uses the SHS algorithm again, as above.
+        We use the praat library to simplify the code and calculations.
+        Returns:
+            dict: A dictionary containing shimmer metrics.
+        """
+        local_shimmer = call(
+            [self._sound, self._point_process],
+            "Get shimmer (local)",
+            time_range_start,
+            time_range_end,
+            period_floor,
+            period_ceiling,
+            maximum_period_factor,
+            maximum_amplitude_factor,
+        )
+        local_db_shimmer = call(
+            [self._sound, self._point_process],
+            "Get shimmer (local_dB)",
+            time_range_start,
+            time_range_end,
+            period_floor,
+            period_ceiling,
+            maximum_period_factor,
+            maximum_amplitude_factor,
+        )
+
+        return {
+            "shimmer_local": local_shimmer,
+            "shimmer_local_dB": local_db_shimmer,
         }
