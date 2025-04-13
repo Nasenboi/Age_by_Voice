@@ -1,6 +1,10 @@
+import os
 import numpy as np
 import librosa
 import scipy.signal as sp
+import soundfile as sf
+import parselmouth
+
 
 GeMAPS_Settings = {
     "AVERAGING_FILTER_LENGTH": 3,
@@ -52,6 +56,25 @@ class Custom_GeMAPS:
         self.y, self.sr = librosa.load(self._audio_path, sr=self.sr, mono=self._mono)
 
         self._scale_input()
+
+        # store a temp file to open with parselmouth
+        self._temp_file_name = "temp.wav"
+        sf.write(
+            self._temp_file_name,
+            self.y,
+            self.sr,
+            subtype="PCM_24",
+        )
+        self._sound: parselmouth.Sound = parselmouth.Sound(self._temp_file_name)
+
+    def __del__(self):
+        """
+        Destructor to clean up the class
+        """
+        try:
+            os.remove(self._temp_file_name)
+        except Exception as e:
+            print(f"Error deleting temporary file: {e}")
 
     """
     Private methods.
@@ -185,7 +208,7 @@ class Custom_GeMAPS:
         This way the F0 is calculated in a more rudamentary and rougher way than in the original GeMAPS.
         Smooth the F0 values and compute the mean and standard deviation for the entire audio segment.
         Returns:
-            dict: A dictionary containing the F0 values, smoothed F0 values, mean, and standard deviation.
+            dict: A dictionary containing the smoothed F0 values, mean, and standard deviation.
         """
         # Define the hop length and frame length
         hop_length = int(GeMAPS_Settings["DEFAULT_HOP_SIZE"] * self.sr)
@@ -220,8 +243,66 @@ class Custom_GeMAPS:
         stats = self._smooth_and_calculate_stats(np.array(f0_values), ignore_zero=True)
 
         return {
-            "f0_values": f0_values,
             "smoothed_f0_values": stats["smoothed_data"].tolist(),
             "mean": stats["mean"],
             "std": stats["std"],
+        }
+
+    def jitter(
+        self,
+        time_range_start: float = 0.0,
+        time_range_end: float = 0.0,  # if 0.0, use the whole audio
+        period_floor: float = 0.0001,
+        period_ceiling: float = 0.02,
+        maximum_period_factor: float = 1.3,
+    ) -> dict:
+        """
+        Calculate jitter (frequency perturbation) for the audio signal using the parselmouth library.
+        The original GeMAPS uses the SHS algorithm again, as above.
+        We use the praat library to simplify the code and calculations.
+        Returns:
+            dict: A dictionary containing the jitter local, jitter local absolute, jitter rap, and jitter ppq5.
+        """
+
+        point_process = parselmouth.praat.call(
+            self._sound,
+            "To PointProcess (periodic, cc)",
+            GeMAPS_Settings["F0_MIN"],
+            GeMAPS_Settings["F0_MAX"],
+        )
+
+        # calculate the jitter over time
+        jitter_local = parselmouth.praat.call(
+            point_process,
+            "Get jitter (local)",
+            time_range_start,
+            time_range_end,
+            period_floor,
+            period_ceiling,
+            maximum_period_factor,
+        )
+
+        localabsoluteJitter = parselmouth.praat.call(
+            point_process,
+            "Get jitter (local, absolute)",
+            time_range_start,
+            time_range_end,
+            period_floor,
+            period_ceiling,
+            maximum_period_factor,
+        )
+        rapJitter = parselmouth.praat.call(
+            point_process,
+            "Get jitter (rap)",
+            time_range_start,
+            time_range_end,
+            period_floor,
+            period_ceiling,
+            maximum_period_factor,
+        )
+
+        return {
+            "jitter_local": jitter_local,
+            "jitter_local_absolute": localabsoluteJitter,
+            "jitter_rap": rapJitter,
         }
