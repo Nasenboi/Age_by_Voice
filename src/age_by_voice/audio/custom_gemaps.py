@@ -9,6 +9,8 @@ GeMAPS_Settings = {
     "DEFAULT_HOP_SIZE": 0.010,
     "GAUSSIAN_WINDOW_STD": 0.04,
     "F0_START": 27.5,
+    "F0_MIN": 50,
+    "F0_MAX": 1000,
     "ALPHA_RATIO_LOW": (50, 1_000),
     "ALPHA_RATIO_HIGH": (1_000, 5_000),
     "HAMMERBERG_INDEX_LOW": (0, 2_000),
@@ -51,6 +53,11 @@ class Custom_GeMAPS:
 
         self._scale_input()
 
+    """
+    Private methods.
+    You dont really need to know what is happening in there.
+    """
+
     def _scale_input(self) -> None:
         """
         Scale the input audio signal.
@@ -61,6 +68,46 @@ class Custom_GeMAPS:
         # Change the bit depth to 32-bit float
         if self.y.dtype != np.float32:
             self.y = self.y.astype(np.float32)
+
+    def _smooth_and_calculate_stats(
+        self, data: np.ndarray, ignore_zero: bool = False
+    ) -> dict:
+        """
+        Smooth a numpy array using a moving average filter and calculate its mean and standard deviation.
+        Args:
+            data (np.ndarray): The input array to process.
+            ignore_zero (bool): Whether to ignore zero values when calculating statistics.
+        Returns:
+            dict: A dictionary containing the smoothed array, mean, and standard deviation.
+        """
+        # Get the filter length from GeMAPS_Settings
+        filter_length = GeMAPS_Settings["AVERAGING_FILTER_LENGTH"]
+
+        # Smooth the data using a moving average filter
+        smoothed_data = np.convolve(
+            data, np.ones(filter_length) / filter_length, mode="same"
+        )
+
+        # Optionally ignore zero values for statistics
+        if ignore_zero:
+            non_zero_data = smoothed_data[smoothed_data != 0]
+        else:
+            non_zero_data = smoothed_data
+
+        # Calculate mean and standard deviation
+        data_mean = np.mean(non_zero_data) if non_zero_data.size > 0 else 0
+        data_std = np.std(non_zero_data) if non_zero_data.size > 0 else 0
+
+        return {
+            "smoothed_data": smoothed_data,
+            "mean": data_mean,
+            "std": data_std,
+        }
+
+    """
+    Public methods.
+    These methods you can use to extract features from the audio signal.
+    """
 
     def dft(self, ts: float = 0.0, log_values: bool = False) -> np.ndarray:
         """
@@ -113,12 +160,12 @@ class Custom_GeMAPS:
             np.ndarray: 2D array representing the spectrogram.
         """
         # Define the window size and hop size
-        n_fft = int(GeMAPS_Settings["WINDOW_SIZE_LONG"] * self.sr)
+        win_length = int(GeMAPS_Settings["WINDOW_SIZE_LONG"] * self.sr)
         hop_length = int(GeMAPS_Settings["DEFAULT_HOP_SIZE"] * self.sr)
 
         # Compute the Short-Time Fourier Transform (STFT)
         stft_result = librosa.stft(
-            self.y, n_fft=n_fft, hop_length=hop_length, window="hann"
+            self.y, win_length=win_length, hop_length=hop_length, window="hann"
         )
 
         # Compute the magnitude spectrogram
@@ -129,3 +176,52 @@ class Custom_GeMAPS:
             spectrogram = librosa.amplitude_to_db(spectrogram, ref=np.max)
 
         return spectrogram
+
+    def f0(self) -> dict:
+        """
+        Calculate the fundamental frequency (F0) for each frame using librosa's piptrack.
+        Notice that the original GeMAPS uses the SHS algorithm.
+        To simplify the code, another algorithm is used here, librosas piptrack uses Parabolic Interpolation.
+        This way the F0 is calculated in a more rudamentary and rougher way than in the original GeMAPS.
+        Smooth the F0 values and compute the mean and standard deviation for the entire audio segment.
+        Returns:
+            dict: A dictionary containing the F0 values, smoothed F0 values, mean, and standard deviation.
+        """
+        # Define the hop length and frame length
+        hop_length = int(GeMAPS_Settings["DEFAULT_HOP_SIZE"] * self.sr)
+        win_length = int(GeMAPS_Settings["WINDOW_SIZE_LONG"] * self.sr)
+        fmin = GeMAPS_Settings["F0_MIN"]
+        fmax = GeMAPS_Settings["F0_MAX"]
+
+        # Use librosa's piptrack to estimate F0
+        pitches, magnitudes = librosa.piptrack(
+            y=self.y,
+            sr=self.sr,
+            win_length=win_length,
+            hop_length=hop_length,
+            fmin=fmin,
+            fmax=fmax,
+        )
+
+        # Extract F0 values for each frame
+        f0_values = []
+        for i in range(pitches.shape[1]):
+            pitch_frame = pitches[:, i]
+            magnitude_frame = magnitudes[:, i]
+            max_idx = np.argmax(magnitude_frame)
+            f0 = pitch_frame[max_idx] if magnitude_frame[max_idx] > 0 else 0
+            voicing_prob = magnitude_frame[max_idx] / (np.mean(magnitude_frame) + 1e-10)
+            if voicing_prob < 0.7:
+                f0 = 0
+
+            f0_values.append(f0)
+
+        # Smooth and calculate statistics for F0 values
+        stats = self._smooth_and_calculate_stats(np.array(f0_values), ignore_zero=True)
+
+        return {
+            "f0_values": f0_values,
+            "smoothed_f0_values": stats["smoothed_data"].tolist(),
+            "mean": stats["mean"],
+            "std": stats["std"],
+        }
