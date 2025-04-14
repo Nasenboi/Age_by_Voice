@@ -3,6 +3,7 @@ import glob
 import pandas as pd
 import opensmile
 import librosa
+import soundfile as sf
 from ..models.features_model import (
     FEATURE_SET,
     FEATURE_LEVEL,
@@ -38,7 +39,8 @@ class BaseParser:
         self._sr = sr
         self._mono = mono
         self._smile = opensmile.Smile(
-            feature_set=FEATURE_SET, feature_level=FEATURE_LEVEL
+            feature_set=FEATURE_SET,
+            feature_level=FEATURE_LEVEL,
         )
 
         if save_dir:
@@ -78,6 +80,7 @@ class BaseParser:
             pd.DataFrame: DataFrame with the extracted features.
         """
         y, sr = librosa.load(audio_path, sr=self._sr, mono=self._mono)
+
         smile_features: pd.DataFrame = self._smile.process_signal(y, sr)
         features: GeMAPS_Features = parse_gemaps_features(smile_features, clip_id)
         return features

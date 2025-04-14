@@ -111,6 +111,7 @@ class CVParser(BaseParser):
                     clip_id=clip_id,
                     audio_path=audio_path,
                 )
+
             except Exception as e:
                 print(f"Error parsing line: {line}")
                 print(e)
@@ -125,6 +126,7 @@ class CVParser(BaseParser):
                 [self._features, pd.DataFrame([features.model_dump()])],
                 ignore_index=True,
             )
+            break
 
             # Save dataframes temporarily if save_dir is provided
             if save_dir and len(self._voices) % save_interval == 0:
