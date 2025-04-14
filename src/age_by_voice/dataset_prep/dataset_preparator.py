@@ -42,6 +42,7 @@ class Dataset_Perparator:
         # create y labels: [1, 0] if male, [0, 1] if female:
         y = self._get_y(feature="gender")
         # create X features: (just drop the clip_id)
+        self._fill_NaN_features()
         X = self.features.drop(columns=["clip_id"])
         # return the train/test split
         return train_test_split(
@@ -131,3 +132,10 @@ class Dataset_Perparator:
                     "female": (self.voices["voice_gender"] == "f").astype(int),
                 }
             )
+
+    def _fill_NaN_features(self) -> None:
+        """
+        Fill NaN values in the features dataframe.
+        """
+        # Fill NaN values with 0
+        self.features.fillna(0, inplace=True)
