@@ -2,6 +2,7 @@ import os
 from typing import Union
 import pandas as pd
 import tqdm
+import glob
 
 from .base_parser import BaseParser
 from ..models.features_model import FeaturesModel
@@ -13,16 +14,24 @@ class CVParser(BaseParser):
     Parser for the Common Voice dataset.
     """
 
-    def __init__(self, dataset_path: str, audio_path: str, sr=None, mono=None):
+    def __init__(
+        self, dataset_path: str, audio_path: str, sr=None, mono=None, save_dir=None
+    ):
         """
         Class initializer function.
         Do nothing special here, just call the parent class.
         """
-        super().__init__(dataset_path, audio_path, sr, mono)
+        super().__init__(dataset_path, audio_path, sr, mono, save_dir)
 
-    def parse(self):
+    def parse(
+        self, save_dir: str = None, save_interval: int = 1000, num_saves: int = 5
+    ):
         """
         Parse the dataset into the features and voices dataframes.
+        Args:
+            save_dir (str): Path to save the temporary files.
+            save_interval (int): Number of lines to parse before saving.
+            num_saves (int): Number of saves to perform.
         """
         with open(self._dataset_path, "r") as file:
             lines = file.readlines()
@@ -37,10 +46,12 @@ class CVParser(BaseParser):
             total=len(lines),
             desc="Parsing",
             unit="lines",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] - {postfix}",
         )
+        start_parsing = False
         for line in lines:
             bar.update(1)
+            bar.set_postfix(Clips=len(self._voices))
             try:
                 parts = line.strip().split("\t")
                 # print(parts)
@@ -63,7 +74,13 @@ class CVParser(BaseParser):
                     segment,
                 ) = parts
 
-                # print(parts)
+                if not start_parsing:
+                    # check if the clip_id is in the dataframe
+                    if scentence_id in self._voices["clip_id"].values:
+                        # print(f"Already parsed: {scentence_id}")
+                        continue
+                    else:
+                        start_parsing = True
 
                 age_group = self._convert_text_age_group(text_age)
                 gender = self._convert_gender(text_gender)
@@ -106,6 +123,10 @@ class CVParser(BaseParser):
                 [self._features, pd.DataFrame([features.model_dump()])],
                 ignore_index=True,
             )
+
+            # Save dataframes temporarily if save_dir is provided
+            if save_dir and len(self._voices) % save_interval == 0:
+                self._save_temp_files(save_dir, num_saves)
 
     def _convert_text_age_group(self, age: str) -> Union[str, None]:
         # age will either be emty or a string like "twenties"
