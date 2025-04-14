@@ -4,11 +4,10 @@ import pandas as pd
 import opensmile
 import librosa
 from ..models.features_model import (
-    FeaturesModel,
-    parse_features,
     FEATURE_SET,
     FEATURE_LEVEL,
 )
+from ..models.gemaps_features import GeMAPS_Features, parse_gemaps_features
 from ..models.voice_model import VoiceModel
 
 
@@ -33,7 +32,9 @@ class BaseParser:
         self._dataset_path = dataset_path
         self._audio_path = audio_path
         self._voices: pd.DataFrame = pd.DataFrame(columns=VoiceModel.model_fields)
-        self._features: pd.DataFrame = pd.DataFrame(columns=FeaturesModel.model_fields)
+        self._features: pd.DataFrame = pd.DataFrame(
+            columns=GeMAPS_Features.model_fields
+        )
         self._sr = sr
         self._mono = mono
         self._smile = opensmile.Smile(
@@ -66,7 +67,7 @@ class BaseParser:
         """
         self._voices.to_csv(path, index=False)
 
-    def _process_audio(self, audio_path: str, clip_id: str) -> FeaturesModel:
+    def _process_audio(self, audio_path: str, clip_id: str) -> GeMAPS_Features:
         """
         Process audio file and extract features.
         This method helps if the audio file is mp3.
@@ -78,7 +79,7 @@ class BaseParser:
         """
         y, sr = librosa.load(audio_path, sr=self._sr, mono=self._mono)
         smile_features: pd.DataFrame = self._smile.process_signal(y, sr)
-        features: FeaturesModel = parse_features(smile_features, clip_id)
+        features: GeMAPS_Features = parse_gemaps_features(smile_features, clip_id)
         return features
 
     def _load_from_temp_file(self, save_dir: str):
