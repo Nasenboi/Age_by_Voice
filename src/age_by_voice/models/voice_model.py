@@ -4,6 +4,7 @@ from typing import Optional, Union, Literal
 
 class VoiceModel(BaseModel):
     clip_id: Union[str, int]
+    audio_file_name: Optional[str] = None
     voice_name: str
     voice_age: Optional[int] = None
     voice_age_group: Literal[

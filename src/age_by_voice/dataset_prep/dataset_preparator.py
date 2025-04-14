@@ -100,12 +100,21 @@ class Dataset_Perparator:
                         n=min_count, random_state=self._random_state
                     ),
                 ]
-            )
-            self.voices = balanced_voices.reset_index(drop=True)
+            ).reset_index(drop=True)
 
-        self.features = self.features[
-            self.features["clip_id"].isin(self.voices["clip_id"])
-        ].reset_index(drop=True)
+            # Filter features to match the balanced voices
+            balanced_features = self.features[
+                self.features["clip_id"].isin(balanced_voices["clip_id"])
+            ].reset_index(drop=True)
+
+            # Ensure consistent lengths after balancing
+            if len(balanced_voices) != len(balanced_features):
+                raise ValueError(
+                    f"Length mismatch after balancing: voices ({len(balanced_voices)}) and features ({len(balanced_features)})"
+                )
+
+            self.voices = balanced_voices
+            self.features = balanced_features
 
     def _get_y(self, feature: Literal["gender"]) -> pd.DataFrame:
         """

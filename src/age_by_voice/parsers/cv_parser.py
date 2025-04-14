@@ -3,6 +3,7 @@ from typing import Union
 import pandas as pd
 import tqdm
 import glob
+from uuid import uuid4
 
 from .base_parser import BaseParser
 from ..models.features_model import FeaturesModel
@@ -85,7 +86,7 @@ class CVParser(BaseParser):
                 age_group = self._convert_text_age_group(text_age)
                 gender = self._convert_gender(text_gender)
 
-                clip_id = scentence_id
+                clip_id = str(uuid4())
 
                 audio_path = os.path.join(self._audio_path, path)
 
@@ -101,6 +102,7 @@ class CVParser(BaseParser):
                 # print(f"clip_id: {clip_id}, voice_name: {client_id}, voice_age_group: {age_group}, voice_gender: {gender}")
                 voice = VoiceModel(
                     clip_id=clip_id,
+                    audio_file_name=path,
                     voice_name=client_id,
                     voice_age_group=age_group,
                     voice_gender=gender,
