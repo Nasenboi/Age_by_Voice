@@ -49,6 +49,39 @@ class Dataset_Perparator:
             X, y, test_size=test_size, random_state=self._random_state
         )
 
+    def check_balance(self, feature: Literal["gender"]) -> None:
+        """
+        Check the balance of the dataset.
+        Drop rows if necessary.
+        """
+        if feature == "gender":
+            gender_counts = self.voices["voice_gender"].value_counts()
+            min_count = gender_counts.min()
+            balanced_voices = pd.concat(
+                [
+                    self.voices[self.voices["voice_gender"] == "m"].sample(
+                        n=min_count, random_state=self._random_state
+                    ),
+                    self.voices[self.voices["voice_gender"] == "f"].sample(
+                        n=min_count, random_state=self._random_state
+                    ),
+                ]
+            ).reset_index(drop=True)
+
+            # Filter features to match the balanced voices
+            balanced_features = self.features[
+                self.features["clip_id"].isin(balanced_voices["clip_id"])
+            ].reset_index(drop=True)
+
+            # Ensure consistent lengths after balancing
+            if len(balanced_voices) != len(balanced_features):
+                raise ValueError(
+                    f"Length mismatch after balancing: voices ({len(balanced_voices)}) and features ({len(balanced_features)})"
+                )
+
+            self.voices = balanced_voices
+            self.features = balanced_features
+
     def prepare_age_dataset(self, test_size: float = 0.1) -> list:
         """
         prepares the dataset for gender classification.
@@ -83,39 +116,6 @@ class Dataset_Perparator:
             # Sort them by clip_id
             self.voices.sort_values("clip_id", inplace=True)
             self.features.sort_values("clip_id", inplace=True)
-
-    def _check_balance(self, feature: Literal["gender"]) -> None:
-        """
-        Check the balance of the dataset.
-        Drop rows if necessary.
-        """
-        if feature == "gender":
-            gender_counts = self.voices["voice_gender"].value_counts()
-            min_count = gender_counts.min()
-            balanced_voices = pd.concat(
-                [
-                    self.voices[self.voices["voice_gender"] == "m"].sample(
-                        n=min_count, random_state=self._random_state
-                    ),
-                    self.voices[self.voices["voice_gender"] == "f"].sample(
-                        n=min_count, random_state=self._random_state
-                    ),
-                ]
-            ).reset_index(drop=True)
-
-            # Filter features to match the balanced voices
-            balanced_features = self.features[
-                self.features["clip_id"].isin(balanced_voices["clip_id"])
-            ].reset_index(drop=True)
-
-            # Ensure consistent lengths after balancing
-            if len(balanced_voices) != len(balanced_features):
-                raise ValueError(
-                    f"Length mismatch after balancing: voices ({len(balanced_voices)}) and features ({len(balanced_features)})"
-                )
-
-            self.voices = balanced_voices
-            self.features = balanced_features
 
     def _get_y(self, feature: Literal["gender"]) -> pd.DataFrame:
         """
