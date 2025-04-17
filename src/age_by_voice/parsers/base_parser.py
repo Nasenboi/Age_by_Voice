@@ -4,10 +4,13 @@ import pandas as pd
 import opensmile
 import librosa
 import soundfile as sf
+from typing import Union
 from ..models.features_model import (
     FEATURE_SET,
     FEATURE_LEVEL,
 )
+from ..models.custom_gemaps_features import Custom_GeMAPS_Features
+from ..audio.custom_gemaps import Custom_GeMAPS
 from ..models.gemaps_features import GeMAPS_Features, parse_gemaps_features
 from ..models.voice_model import VoiceModel
 
@@ -22,7 +25,13 @@ class BaseParser:
     """
 
     def __init__(
-        self, dataset_path: str, audio_path: str, sr=None, mono=None, save_dir=None
+        self,
+        dataset_path: str,
+        audio_path: str,
+        sr=None,
+        mono=None,
+        save_dir=None,
+        custom_gemaps: bool = True,
     ):
         """
         Class initialize funcion.
@@ -33,15 +42,21 @@ class BaseParser:
         self._dataset_path = dataset_path
         self._audio_path = audio_path
         self._voices: pd.DataFrame = pd.DataFrame(columns=VoiceModel.model_fields)
-        self._features: pd.DataFrame = pd.DataFrame(
-            columns=GeMAPS_Features.model_fields
-        )
+        if custom_gemaps:
+            self._features: pd.DataFrame = pd.DataFrame(
+                columns=Custom_GeMAPS_Features.model_fields
+            )
+        else:
+            self._features: pd.DataFrame = pd.DataFrame(
+                columns=GeMAPS_Features.model_fields
+            )
         self._sr = sr
         self._mono = mono
         self._smile = opensmile.Smile(
             feature_set=FEATURE_SET,
             feature_level=FEATURE_LEVEL,
         )
+        self._custom_gemaps = custom_gemaps
 
         if save_dir:
             self._load_from_temp_file(save_dir)
@@ -69,7 +84,9 @@ class BaseParser:
         """
         self._voices.to_csv(path, index=False)
 
-    def _process_audio(self, audio_path: str, clip_id: str) -> GeMAPS_Features:
+    def _process_audio(
+        self, audio_path: str, clip_id: str
+    ) -> Union[GeMAPS_Features, Custom_GeMAPS_Features]:
         """
         Process audio file and extract features.
         This method helps if the audio file is mp3.
@@ -79,11 +96,16 @@ class BaseParser:
         Returns:
             pd.DataFrame: DataFrame with the extracted features.
         """
-        y, sr = librosa.load(audio_path, sr=self._sr, mono=self._mono)
+        if self._custom_gemaps:
+            custom_gemaps = Custom_GeMAPS(
+                audio_path=audio_path, sample_rate=self._sr, mono=self._mono
+            )
+            return custom_gemaps.custom_gemaps(clip_id=clip_id)
+        else:
+            y, sr = librosa.load(audio_path, sr=self._sr, mono=self._mono)
 
-        smile_features: pd.DataFrame = self._smile.process_signal(y, sr)
-        features: GeMAPS_Features = parse_gemaps_features(smile_features, clip_id)
-        return features
+            smile_features: pd.DataFrame = self._smile.process_signal(y, sr)
+            return parse_gemaps_features(smile_features, clip_id)
 
     def _load_from_temp_file(self, save_dir: str):
         """

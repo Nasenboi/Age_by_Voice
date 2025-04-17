@@ -8,26 +8,26 @@ from .features_model import FeaturesModel
 # -- Time Domain Features --
 # Loudness
 class Loudness(BaseModel):
-    loudness_mean: float
-    loudness_std: float
-    loudness_25: float
-    loudness_80: float
-    loudness_90: float
+    loudness_mean: Optional[float] = None
+    loudness_std: Optional[float] = None
+    loudness_25: Optional[float] = None
+    loudness_80: Optional[float] = None
+    loudness_90: Optional[float] = None
 
 
 # Zero Crossing Rate
 class Zero_Crossing_Rate(BaseModel):
-    zcr_mean: float
-    zcr_std: float
+    zcr_mean: Optional[float] = None
+    zcr_std: Optional[float] = None
 
 
 # Peaks per Second
 class Peaks_Per_Second(BaseModel):
-    pps_mean: float
-    pps_std: float
-    pps_25: float
-    pps_80: float
-    pps_90: float
+    pps_mean: Optional[float] = None
+    pps_std: Optional[float] = None
+    pps_25: Optional[float] = None
+    pps_80: Optional[float] = None
+    pps_90: Optional[float] = None
 
 
 # Voiced Segments per second => retrieved from f0 though!
@@ -38,47 +38,46 @@ class Peaks_Per_Second(BaseModel):
 # -- Frequency Domain Features --
 # HNR
 class Harmonics_To_Noise_Ratio(BaseModel):
-    hnr_mean: float
-    hnr_std: float
+    hnr_mean: Optional[float] = None
 
 
 # F0
 class F0(BaseModel):
-    f0_mean: float
-    f0_std: float
-    f0_25: float
-    f0_80: float
-    f0_90: float
-    f0_min: float
-    f0_max: float
+    f0_mean: Optional[float] = None
+    f0_std: Optional[float] = None
+    f0_25: Optional[float] = None
+    f0_80: Optional[float] = None
+    f0_90: Optional[float] = None
+    f0_min: Optional[float] = None
+    f0_max: Optional[float] = None
 
 
 # Additional Spectral Features
 class Additional_Spectral_Features(BaseModel):
-    spectral_centroid_mean: float
-    spectral_centroid_std: float
+    spectral_centroid_mean: Optional[float] = None
+    spectral_centroid_std: Optional[float] = None
 
-    spectral_bandwidth_mean: float
-    spectral_bandwidth_std: float
+    spectral_bandwidth_mean: Optional[float] = None
+    spectral_bandwidth_std: Optional[float] = None
 
-    spectral_flatness_mean: float
-    spectral_flatness_std: float
+    spectral_flatness_mean: Optional[float] = None
+    spectral_flatness_std: Optional[float] = None
 
-    spectral_rolloff_mean: float
-    spectral_rolloff_std: float
+    spectral_rolloff_mean: Optional[float] = None
+    spectral_rolloff_std: Optional[float] = None
 
 
 # -- Quefrency Domain Features --
 # MFCC_1-4
 class MFCC_1_4(BaseModel):
-    mfcc_1_mean: float
-    mfcc_1_std: float
-    mfcc_2_mean: float
-    mfcc_2_std: float
-    mfcc_3_mean: float
-    mfcc_3_std: float
-    mfcc_4_mean: float
-    mfcc_4_std: float
+    mfcc_1_mean: Optional[float] = None
+    mfcc_1_std: Optional[float] = None
+    mfcc_2_mean: Optional[float] = None
+    mfcc_2_std: Optional[float] = None
+    mfcc_3_mean: Optional[float] = None
+    mfcc_3_std: Optional[float] = None
+    mfcc_4_mean: Optional[float] = None
+    mfcc_4_std: Optional[float] = None
 
 
 class Custom_GeMAPS_Features(

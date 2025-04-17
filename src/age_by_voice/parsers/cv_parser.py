@@ -7,6 +7,9 @@ from uuid import uuid4
 
 from .base_parser import BaseParser
 from ..models.features_model import FeaturesModel
+from ..models.gemaps_features import GeMAPS_Features
+from ..models.custom_gemaps_features import Custom_GeMAPS_Features
+from ..audio.custom_gemaps import Custom_GeMAPS
 from ..models.voice_model import VoiceModel
 
 
@@ -16,7 +19,13 @@ class CVParser(BaseParser):
     """
 
     def __init__(
-        self, dataset_path: str, audio_path: str, sr=None, mono=None, save_dir=None
+        self,
+        dataset_path: str,
+        audio_path: str,
+        sr=None,
+        mono=None,
+        save_dir=None,
+        custom_gemaps: bool = True,
     ):
         """
         Class initializer function.
@@ -113,9 +122,7 @@ class CVParser(BaseParser):
                 )
 
             except Exception as e:
-                print(f"Error parsing line: {line}")
-                print(e)
-                break
+                continue
 
             # Add the features to the features dataframe
             self._voices = pd.concat(
@@ -126,7 +133,6 @@ class CVParser(BaseParser):
                 [self._features, pd.DataFrame([features.model_dump()])],
                 ignore_index=True,
             )
-            break
 
             # Save dataframes temporarily if save_dir is provided
             if save_dir and len(self._voices) % save_interval == 0:

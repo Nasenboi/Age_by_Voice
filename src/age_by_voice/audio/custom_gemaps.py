@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy.signal as sp
 import soundfile as sf
+from Signal_Analysis.features.signal import get_HNR
 
 from ..models.custom_gemaps_features import *
 
@@ -181,6 +182,26 @@ class Custom_GeMAPS:
     These methods you can use to extract features from the audio signal.
     """
 
+    def custom_gemaps(self, clip_id: Union[str, int]) -> Custom_GeMAPS_Features:
+        """
+        Extract custom GeMAPS features from the audio signal.
+        This function extracts various features from the audio signal, including loudness, zero crossing rate,
+        peaks per second, F0, HNR, additional spectral features, and MFCCs.
+
+        Returns:
+            Custom_GeMAPS_Features: A named tuple containing the extracted features.
+        """
+        return Custom_GeMAPS_Features(
+            clip_id=clip_id,
+            **self.loudness().model_dump(),
+            **self.zero_crossing_rate().model_dump(),
+            **self.peaks_per_second().model_dump(),
+            **self.harmonics_to_noice_ratio().model_dump(),
+            **self.f0().model_dump(),
+            **self.additional_spectral_features().model_dump(),
+            **self.mfcc_1_4().model_dump(),
+        )
+
     # -- Time Domain Features --
     # Loudness
     def loudness(self) -> Loudness:
@@ -236,35 +257,22 @@ class Custom_GeMAPS:
     def peaks_per_second(self) -> Peaks_Per_Second:
         """
         Calculate the peaks per second of the audio signal.
-        This function calculates the peaks per second of the audio signal using the RMS method for every frame
+        This function calculates the peaks per second of the audio signal using scipy's find_peaks method for every frame.
 
         Returns:
             Peaks_Per_Second: A named tuple containing the peaks per second mean and standard deviation.
         """
-        # Calculate the peaks per second
+        # Calculate the peaks per second using scipy's find_peaks
         pps = []
-        pre_max = 3
-        post_max = 3
-        pre_avg = 2
-        post_avg = 2
-        delta = 0.5
-        wait = 5
         for i in range(self._time_frames.shape[1]):
             # Get the current frame
             frame = self._time_frames[:, i]
-            peaks_count = (
-                librosa.util.peak_pick(
-                    frame,
-                    pre_max=pre_max,
-                    post_max=post_max,
-                    pre_avg=pre_avg,
-                    post_avg=post_avg,
-                    delta=delta,
-                    wait=wait,
-                ).shape[0]
-                / GeMAPS_Settings["WINDOW_SIZE_LONG"]
-            )
+            peaks, _ = sp.find_peaks(
+                frame, height=0.01
+            )  # Adjust height threshold as needed
+            peaks_count = len(peaks) / GeMAPS_Settings["WINDOW_SIZE_LONG"]
             pps.append(peaks_count)
+
         smoothed_pps = self._smooth_and_calculate_stats(
             np.array(pps), ignore_zero=True, advanced_stats=True
         )
@@ -312,27 +320,9 @@ class Custom_GeMAPS:
         Returns:
             Harmonics_To_Noise_Ratio: A named tuple containing the HNR mean and standard deviation.
         """
-        autocorr = librosa.autocorrelate(self.y)
+        hnr = get_HNR(self.y, self.sr, min_pitch=GeMAPS_Settings["F0_START"])
 
-        f0_idx = (
-            int(self.sr / self._f0[np.argmax(self._f0_voiced_flag)])
-            if np.any(self._f0_voiced_flag)
-            else 0
-        )
-
-        if f0_idx > 0 and f0_idx < len(autocorr):
-            hnr = 10 * np.log10(autocorr[f0_idx] / np.mean(autocorr[f0_idx + 1 :]))
-        else:
-            hnr = 0
-
-        smoothed_hnr = self._smooth_and_calculate_stats(
-            np.array([hnr]), ignore_zero=True, advanced_stats=True
-        )
-
-        return Harmonics_To_Noise_Ratio(
-            hnr_mean=smoothed_hnr["mean"],
-            hnr_std=smoothed_hnr["std"],
-        )
+        return Harmonics_To_Noise_Ratio(hnr_mean=hnr)
 
     # Additional Spectral Features
     def additional_spectral_features(self) -> Additional_Spectral_Features:
@@ -402,27 +392,25 @@ class Custom_GeMAPS:
         The MFCCs should be calculated using only the voiced segments of the audio signal.
         Returns:
             MFCC_1_4: A named tuple containing the MFCC mean and standard deviation.
-        """        
-        S = np.abs(self._stft[:, self._f0_voiced_flag])
-
-        S = librosa.feature.melspectrogram(
-            S=S,
-            sr=self.sr,
-            n_mels=4,
+        """
+        S = librosa.amplitude_to_db(
+            np.abs(self._stft[:, self._f0_voiced_flag]), ref=np.max
         )
+
+        S = librosa.feature.melspectrogram(S=S, sr=self.sr)
 
         # Calculate MFCCs
         mfccs = librosa.feature.mfcc(
             S=S,
             sr=self.sr,
-            n_mfcc=4,
             win_length=self._window_long,
             hop_length=self._hop,
         )
 
         # Smooth the MFCC values
         smoothed_mfccs = [
-            self._smooth_and_calculate_stats(mfcc, ignore_zero=True) for mfcc in mfccs
+            self._smooth_and_calculate_stats(mfccs[i], ignore_zero=True)
+            for i in range(4)
         ]
 
         return MFCC_1_4(
