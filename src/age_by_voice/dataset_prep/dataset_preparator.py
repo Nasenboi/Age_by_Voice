@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from typing import Literal
+from scipy.special import expit  # Import sigmoid function
 
 from ..models.features_model import FeaturesModel
 from ..models.voice_model import VoiceModel
@@ -12,7 +13,9 @@ class Dataset_Perparator:
     Class to prepare the CV dataset
     """
 
-    def __init__(self, voices_csv_path: str, features_csv_path: str) -> None:
+    def __init__(
+        self, voices_csv_path: str, features_csv_path: str, normalize: bool = False
+    ) -> None:
         """
         Constructor for the CV_Preparator class.
         """
@@ -22,6 +25,8 @@ class Dataset_Perparator:
 
         self._check_length()
         self._check_order()
+        if normalize:
+            self._normalize()
 
     """
         Public methods
@@ -98,6 +103,16 @@ class Dataset_Perparator:
     """
         Private methods
     """
+
+    def _normalize(self) -> None:
+        """
+        Normalize the features dataframe.
+        Scales all float columns to be between -1 and 1.
+        """
+        float_columns = self.features.select_dtypes(include=["float"]).columns
+        self.features[float_columns] = self.features[float_columns].apply(
+            lambda x: (x - x.min()) / (x.max() - x.min()) * 2 - 1
+        )
 
     def _check_length(self) -> None:
         """
