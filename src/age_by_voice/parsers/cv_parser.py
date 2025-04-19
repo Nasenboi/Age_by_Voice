@@ -31,7 +31,7 @@ class CVParser(BaseParser):
         Class initializer function.
         Do nothing special here, just call the parent class.
         """
-        super().__init__(dataset_path, audio_path, sr, mono, save_dir)
+        super().__init__(dataset_path, audio_path, sr, mono, save_dir, custom_gemaps)
 
     def parse(
         self, save_dir: str = None, save_interval: int = 1000, num_saves: int = 5
@@ -122,6 +122,7 @@ class CVParser(BaseParser):
                 )
 
             except Exception as e:
+                print(f"Error parsing line:\n {e}")
                 continue
 
             # Add the features to the features dataframe
