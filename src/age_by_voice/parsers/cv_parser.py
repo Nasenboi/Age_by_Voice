@@ -5,7 +5,7 @@ import tqdm
 import glob
 from uuid import uuid4
 
-from .base_parser import BaseParser
+from .base_parser import BaseParser, FEATURE_SETS
 from ..models.features_model import FeaturesModel
 from ..models.gemaps_features import GeMAPS_Features
 from ..models.custom_gemaps_features import Custom_GeMAPS_Features
@@ -25,13 +25,13 @@ class CVParser(BaseParser):
         sr=None,
         mono=None,
         save_dir=None,
-        custom_gemaps: bool = True,
+        feature_set: FEATURE_SETS = "GeMAPSv02",
     ):
         """
         Class initializer function.
         Do nothing special here, just call the parent class.
         """
-        super().__init__(dataset_path, audio_path, sr, mono, save_dir, custom_gemaps)
+        super().__init__(dataset_path, audio_path, sr, mono, save_dir, feature_set)
 
     def parse(
         self, save_dir: str = None, save_interval: int = 1000, num_saves: int = 5
@@ -120,6 +120,10 @@ class CVParser(BaseParser):
                     clip_id=clip_id,
                     audio_path=audio_path,
                 )
+                if self._feature_set == "ComParE2016":
+                    features = features.iloc[0].to_dict()
+                else:
+                    features = features.model_dump()
 
             except Exception as e:
                 print(f"Error parsing line:\n {e}")
@@ -131,7 +135,7 @@ class CVParser(BaseParser):
                 ignore_index=True,
             )
             self._features = pd.concat(
-                [self._features, pd.DataFrame([features.model_dump()])],
+                [self._features, pd.DataFrame([features])],
                 ignore_index=True,
             )
 
