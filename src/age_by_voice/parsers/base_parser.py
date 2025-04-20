@@ -65,7 +65,7 @@ class BaseParser:
                 feature_level=opensmile.FeatureLevel.Functionals,
             )
             self._features: pd.DataFrame = pd.DataFrame(
-                columns=self._smile.feature_names
+                columns=self._smile.feature_names + ["clip_id"]
             )
 
         if save_dir:
@@ -115,6 +115,8 @@ class BaseParser:
 
         smile_features: pd.DataFrame = self._smile.process_signal(y, sr)
         if self._feature_set == "ComParE2016":
+            # add clip_id to the features
+            smile_features["clip_id"] = clip_id
             return smile_features
         else:
             return parse_gemaps_features(smile_features, clip_id)
