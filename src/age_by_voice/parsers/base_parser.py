@@ -112,6 +112,15 @@ class BaseParser:
                     self._extract_audio_features(clip_id, audio_path)
 
             except Exception as e:
+                # if any error occurs, drop the rows with the clip_id
+                self._voices.drop(
+                    self._voices[self._voices["clip_id"] == clip_id].index,
+                    inplace=True,
+                )
+                self._features.drop(
+                    self._features[self._features["clip_id"] == clip_id].index,
+                    inplace=True,
+                )
                 continue
 
             # Save dataframes temporarily if save_dir is provided
@@ -210,16 +219,21 @@ class BaseParser:
         if features_files:
             self._features = pd.read_csv(features_files[-1])
 
-    def _start_parsing_check(self, clip_id: str):
+    def _start_parsing_check(self, voice_name: str = None, clip_id: str = None):
         """
         Checks when to start parsing.
         Should be called on _extract_voice_features.
         Args:
+            voice_name (str): Voice name of the current line.
             clip_id (str): Clip ID of the current line.
         """
         if not self._start_parsing:
-            if clip_id in self._voices["clip_id"].values:
+            if (clip_id is not None and clip_id in self._voices["clip_id"].values) or (
+                voice_name is not None
+                and voice_name in self._voices["voice_name"].values
+            ):
                 raise ValueError(f"Clip ID {clip_id} already exists in the dataset.")
+
             else:
                 self._start_parsing = True
 

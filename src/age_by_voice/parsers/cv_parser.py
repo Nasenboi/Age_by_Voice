@@ -52,12 +52,12 @@ class CVParser(BaseParser):
             segment,
         ) = parts
 
-        self._start_parsing_check(scentence_id)
-
         age_group = self._convert_text_age_group(text_age)
         gender = self._convert_gender(text_gender)
         clip_id = str(uuid4())
         audio_path = os.path.join(self._audio_path, path)
+        voice_name = age_group + "_" + gender + "_" + client_id[:5]
+        self._start_parsing_check(voice_name=voice_name)
 
         if not os.path.exists(audio_path):
             raise FileNotFoundError(
@@ -70,7 +70,7 @@ class CVParser(BaseParser):
         voice = VoiceModel(
             clip_id=clip_id,
             audio_file_name=path,
-            voice_name=client_id,
+            voice_name=voice_name,
             voice_age_group=age_group,
             voice_gender=gender,
         )
