@@ -1,5 +1,6 @@
 import os
 import glob
+import tqdm
 import pandas as pd
 import opensmile
 import librosa
@@ -71,12 +72,51 @@ class BaseParser:
         if save_dir:
             self._load_from_temp_file(save_dir)
 
+        self._start_parsing = False
+
     def parse(
-        self, save_dir: str = None, save_interval: int = 1000, num_saves: int = 5
+        self,
+        save_dir: str = None,
+        save_interval: int = 1000,
+        num_saves: int = 5,
+        extract_audio_features: bool = True,
+        first_line_is_header: bool = True,
     ):
-        raise NotImplementedError(
-            "This method should be implemented in the child class"
+        """
+        Parse the dataset into the features and voices dataframes.
+        Args:
+            save_dir (str): Path to save the temporary files.
+            save_interval (int): Number of lines to parse before saving.
+            num_saves (int): Number of saves to perform.
+        """
+        with open(self._dataset_path, "r") as file:
+            lines = file.readlines()
+
+        if first_line_is_header:
+            # delete 1st line
+            lines = lines[1:]
+
+        bar = tqdm.tqdm(
+            total=len(lines),
+            desc="Parsing",
+            unit="lines",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] - {postfix}",
         )
+        for line in lines:
+            bar.update(1)
+            bar.set_postfix(Clips=len(self._voices))
+            try:
+                clip_id, audio_path = self._extract_voice_features(line)
+
+                if extract_audio_features:
+                    self._extract_audio_features(clip_id, audio_path)
+
+            except Exception as e:
+                continue
+
+            # Save dataframes temporarily if save_dir is provided
+            if save_dir and len(self._voices) % save_interval == 0:
+                self._save_temp_files(save_dir, num_saves)
 
     def save_features(self, path: str):
         """
@@ -93,6 +133,35 @@ class BaseParser:
             path (str): Path to save the voices csv file.
         """
         self._voices.to_csv(path, index=False)
+
+    def _extract_voice_features(self, line: str):
+        """ "
+        Extract voice features from a given line of the dataset.
+        Args:
+            line (str): Line from the dataset.
+        """
+        raise NotImplementedError(
+            "This method should be implemented in the child class"
+        )
+
+    def _extract_audio_features(self, clip_id: str, audio_path: str):
+        """
+        Extract audio features from a given audio file.
+        Append it to the features dataframe.
+        """
+        features = self._process_audio(
+            clip_id=clip_id,
+            audio_path=audio_path,
+        )
+        if self._feature_set == "ComParE2016":
+            features = features.iloc[0].to_dict()
+        else:
+            features = features.model_dump()
+
+        self._features = pd.concat(
+            [self._features, pd.DataFrame([features])],
+            ignore_index=True,
+        )
 
     def _process_audio(
         self, audio_path: str, clip_id: str
@@ -140,6 +209,19 @@ class BaseParser:
             self._voices = pd.read_csv(voices_files[-1])
         if features_files:
             self._features = pd.read_csv(features_files[-1])
+
+    def _start_parsing_check(self, clip_id: str):
+        """
+        Checks when to start parsing.
+        Should be called on _extract_voice_features.
+        Args:
+            clip_id (str): Clip ID of the current line.
+        """
+        if not self._start_parsing:
+            if clip_id in self._voices["clip_id"].values:
+                raise ValueError(f"Clip ID {clip_id} already exists in the dataset.")
+            else:
+                self._start_parsing = True
 
     def _save_temp_files(self, save_dir: str, num_saves: int):
         """
