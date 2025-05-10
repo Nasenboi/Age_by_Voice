@@ -4,12 +4,8 @@ import tqdm
 import pandas as pd
 import opensmile
 import librosa
-import soundfile as sf
-from typing import Union, Literal
-from ..models.features_model import (
-    FEATURE_SET,
-    FEATURE_LEVEL,
-)
+from typing import Union, Literal, Tuple
+
 from ..models.custom_gemaps_features import Custom_GeMAPS_Features
 from ..audio.custom_gemaps import Custom_GeMAPS
 from ..models.gemaps_features import GeMAPS_Features, parse_gemaps_features
@@ -106,25 +102,31 @@ class BaseParser:
             bar.update(1)
             bar.set_postfix(Clips=len(self._voices))
             try:
+                clip_id, audio_path = None, None
                 clip_id, audio_path = self._extract_voice_features(line)
 
                 if extract_audio_features:
                     self._extract_audio_features(clip_id, audio_path)
 
             except Exception as e:
-                # if any error occurs, drop the rows with the clip_id
-                self._voices.drop(
-                    self._voices[self._voices["clip_id"] == clip_id].index,
-                    inplace=True,
-                )
-                self._features.drop(
-                    self._features[self._features["clip_id"] == clip_id].index,
-                    inplace=True,
-                )
+                if clip_id is not None:
+                    # if any error occurs, drop the rows with the clip_id
+                    self._voices.drop(
+                        self._voices[self._voices["clip_id"] == clip_id].index,
+                        inplace=True,
+                    )
+                    self._features.drop(
+                        self._features[self._features["clip_id"] == clip_id].index,
+                        inplace=True,
+                    )
                 continue
 
             # Save dataframes temporarily if save_dir is provided
-            if save_dir and len(self._voices) % save_interval == 0:
+            if (
+                self._start_parsing
+                and save_dir
+                and len(self._voices) % save_interval == 0
+            ):
                 self._save_temp_files(save_dir, num_saves)
 
     def save_features(self, path: str):
@@ -143,7 +145,7 @@ class BaseParser:
         """
         self._voices.to_csv(path, index=False)
 
-    def _extract_voice_features(self, line: str):
+    def _extract_voice_features(self, line: str) -> Tuple[str, str]:
         """ "
         Extract voice features from a given line of the dataset.
         Args:
