@@ -107,6 +107,9 @@ class BaseParser:
 
                 if extract_audio_features:
                     self._extract_audio_features(clip_id, audio_path)
+                    self._voices.loc[
+                        self._voices["clip_id"] == clip_id, "features_extracted"
+                    ] = True
 
             except Exception as e:
                 if clip_id is not None:
