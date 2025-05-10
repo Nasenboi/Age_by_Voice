@@ -4,12 +4,13 @@ import tqdm
 import pandas as pd
 import opensmile
 import librosa
+import soundfile as sf
 from typing import Union, Literal, Tuple
 
 from ..models.custom_gemaps_features import Custom_GeMAPS_Features
 from ..audio.custom_gemaps import Custom_GeMAPS
-from ..models.gemaps_features import GeMAPS_Features, parse_gemaps_features
 from ..models.voice_model import VoiceModel
+from ..models.features_model import FeaturesModel
 
 FEATURE_SETS = Literal["GeMAPSv02", "Custom_GeMAPSv02", "ComParE2016"]
 
@@ -46,15 +47,15 @@ class BaseParser:
         self._feature_set = feature_set
         if feature_set == "GeMAPSv02":
             self._smile = opensmile.Smile(
-                feature_set=opensmile.FeatureSet.GeMAPSv02,
+                feature_set=opensmile.FeatureSet.eGeMAPSv02,
                 feature_level=opensmile.FeatureLevel.Functionals,
             )
             self._features: pd.DataFrame = pd.DataFrame(
-                columns=Custom_GeMAPS_Features.model_fields
+                columns=self._smile.feature_names + ["clip_id"]
             )
         elif feature_set == "Custom_GeMAPSv02":
             self._features: pd.DataFrame = pd.DataFrame(
-                columns=GeMAPS_Features.model_fields
+                columns=Custom_GeMAPS_Features.model_fields
             )
         elif feature_set == "ComParE2016":
             self._smile = opensmile.Smile(
@@ -96,17 +97,17 @@ class BaseParser:
             total=len(lines),
             desc="Parsing",
             unit="lines",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] - {postfix}",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
         )
         for line in lines:
             bar.update(1)
             bar.set_postfix(Clips=len(self._voices))
             try:
-                clip_id, audio_path = None, None
-                clip_id, audio_path = self._extract_voice_features(line)
+                clip_id, file_name = None, None
+                clip_id, file_name = self._extract_voice_features(line)
 
                 if extract_audio_features:
-                    self._extract_audio_features(clip_id, audio_path)
+                    self._extract_audio_features(clip_id, file_name)
                     self._voices.loc[
                         self._voices["clip_id"] == clip_id, "features_extracted"
                     ] = True
@@ -148,6 +149,63 @@ class BaseParser:
         """
         self._voices.to_csv(path, index=False)
 
+    def extract_features_from_voice_df(
+        self,
+        save_dir: str = None,
+        save_interval: int = 1000,
+        num_saves: int = 5,
+    ):
+        """
+        Extract audio features from the voices dataframe.
+        Args:
+            save_dir (str): Path to save the temporary files.
+            save_interval (int): Number of lines to parse before saving.
+            num_saves (int): Number of saves to perform.
+        """
+
+        # ignore all voices that already have features extracted
+        self._voices_to_work_on = self._voices[
+            self._voices["features_extracted"] == False
+        ].reset_index(drop=True)
+
+        bar = tqdm.tqdm(
+            total=len(self._voices),
+            desc="Parsing",
+            unit="lines",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+        )
+        for row, voice in self._voices_to_work_on.iterrows():
+            bar.update(1)
+            bar.set_postfix(Row=row)
+            try:
+                if voice["features_extracted"]:
+                    continue
+
+                clip_id = voice["clip_id"]
+                file_name = voice["audio_file_name"]
+
+                self._extract_audio_features(clip_id, file_name)
+                self._voices.loc[
+                    self._voices["clip_id"] == clip_id, "features_extracted"
+                ] = True
+
+            except Exception as e:
+                if clip_id is not None:
+                    # if any error occurs, drop the rows with the clip_id
+                    self._voices.loc[
+                        self._voices["clip_id"] == clip_id, "features_extracted"
+                    ] = False
+                    self._features.drop(
+                        self._features[self._features["clip_id"] == clip_id].index,
+                        inplace=True,
+                    )
+                print(f"Error: {e}")
+                continue
+
+            # Save dataframes temporarily if save_dir is provided
+            if save_dir and row != 0 and row % save_interval == 0:
+                self._save_temp_files(save_dir, num_saves)
+
     def _extract_voice_features(self, line: str) -> Tuple[str, str]:
         """ "
         Extract voice features from a given line of the dataset.
@@ -158,51 +216,54 @@ class BaseParser:
             "This method should be implemented in the child class"
         )
 
-    def _extract_audio_features(self, clip_id: str, audio_path: str):
+    def _extract_audio_features(self, clip_id: str, file_name: str):
         """
         Extract audio features from a given audio file.
         Append it to the features dataframe.
+        Args:
+            clip_id (str): Clip ID of the audio file.
+            file_name (str): Name of the audio file.
         """
         features = self._process_audio(
             clip_id=clip_id,
-            audio_path=audio_path,
+            file_name=file_name,
         )
-        if self._feature_set == "ComParE2016":
-            features = features.iloc[0].to_dict()
-        else:
+        if self._feature_set == "Custom_GeMAPSv02":
             features = features.model_dump()
-
-        self._features = pd.concat(
-            [self._features, pd.DataFrame([features])],
-            ignore_index=True,
-        )
+            self._features = pd.concat(
+                [self._features, pd.DataFrame([features])],
+                ignore_index=True,
+            )
+        else:
+            self._features = pd.concat(
+                [self._features, features],
+                ignore_index=True,
+            )
 
     def _process_audio(
-        self, audio_path: str, clip_id: str
-    ) -> Union[GeMAPS_Features, Custom_GeMAPS_Features, pd.DataFrame]:
+        self, file_name: str, clip_id: str
+    ) -> Union[FeaturesModel, Custom_GeMAPS_Features, pd.DataFrame]:
         """
         Process audio file and extract features.
         This method helps if the audio file is mp3.
         Also this method can keep the logic of the audio processing across all parsers.
         Args:
-            audio_path (str): Path to the audio file.
+            file_name (str): Name of the audio file.
         Returns:
             pd.DataFrame: DataFrame with the extracted features.
         """
+        audio_path = os.path.join(self._audio_path, file_name)
         if self._feature_set == "Custom_GeMAPSv02":
             custom_gemaps = Custom_GeMAPS(
                 audio_path=audio_path, sample_rate=self._sr, mono=self._mono
             )
             return custom_gemaps.custom_gemaps(clip_id=clip_id)
-        y, sr = librosa.load(audio_path, sr=self._sr, mono=self._mono)
-
+        y, sr = librosa.load(audio_path, sr=self._sr)
+        if self._mono:
+            y = librosa.to_mono(y)
         smile_features: pd.DataFrame = self._smile.process_signal(y, sr)
-        if self._feature_set == "ComParE2016":
-            # add clip_id to the features
-            smile_features["clip_id"] = clip_id
-            return smile_features
-        else:
-            return parse_gemaps_features(smile_features, clip_id)
+        smile_features["clip_id"] = clip_id
+        return smile_features
 
     def _load_from_temp_file(self, save_dir: str):
         """
