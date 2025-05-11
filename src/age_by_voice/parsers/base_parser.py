@@ -169,14 +169,13 @@ class BaseParser:
         ].reset_index(drop=True)
 
         bar = tqdm.tqdm(
-            total=len(self._voices),
+            total=len(self._voices_to_work_on),
             desc="Parsing",
             unit="lines",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
         )
         for row, voice in self._voices_to_work_on.iterrows():
             bar.update(1)
-            bar.set_postfix(Row=row)
             try:
                 if voice["features_extracted"]:
                     continue
