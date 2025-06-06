@@ -12,6 +12,8 @@ from ..audio.custom_gemaps import Custom_GeMAPS
 from ..models.voice_model import VoiceModel
 from ..models.features_model import FeaturesModel
 
+from datetime import datetime
+
 FEATURE_SETS = Literal["GeMAPSv02", "Custom_GeMAPSv02", "ComParE2016"]
 
 
@@ -312,12 +314,18 @@ class BaseParser:
         """
         os.makedirs(save_dir, exist_ok=True)
 
+        time_strf = datetime.now().strftime("%H%M%d%m%y")
+
         # Save voices dataframe
-        voices_file = os.path.join(save_dir, f"save_voices_{len(self._voices)}.csv")
+        voices_file = os.path.join(
+            save_dir, f"save_voices_{len(self._voices)}_{time_strf}.csv"
+        )
         self._voices.to_csv(voices_file, index=False)
 
         # Save features dataframe
-        features_file = os.path.join(save_dir, f"save_features_{len(self._voices)}.csv")
+        features_file = os.path.join(
+            save_dir, f"save_features_{len(self._voices)}_{time_strf}.csv"
+        )
         self._features.to_csv(features_file, index=False)
 
         # Manage saved files to ensure num_saves limit
