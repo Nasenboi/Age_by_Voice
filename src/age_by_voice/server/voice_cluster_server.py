@@ -106,7 +106,7 @@ def updateGraph(selected_color):
         },
         custom_data=["audio_file_name"],
     )
-    fig.update_traces(marker=dict(size=5))
+    fig.update_traces(marker=dict(size=3, opacity=0.9))  # full color
     return fig
 
 
