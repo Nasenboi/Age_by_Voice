@@ -89,7 +89,7 @@ class CVParser(BaseParser):
             return "20"
         elif age == "thirties":
             return "30"
-        elif age == "forties":
+        elif age == "fourties":
             return "40"
         elif age == "fifties":
             return "50"
