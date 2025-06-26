@@ -47,7 +47,6 @@ fig = px.scatter_3d(
     hover_data={"voice_name": True, "voice_age_group": True, "audio_file_name": False},
     custom_data=["audio_file_name"],
 )
-fig.update_traces(marker=dict(size=5))
 
 app.layout = html.Div(
     [
@@ -56,7 +55,7 @@ app.layout = html.Div(
             options=[{"label": col, "value": col} for col in color_columns],
             value=color_columns[0] if color_columns else None,
             clearable=False,
-            style={"width": "300px", "marginBottom": "20px"},
+            style={"width": "500px", "marginBottom": "20px"},
         ),
         dcc.Graph(
             id="voice-3d-plot",
