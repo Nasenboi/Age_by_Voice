@@ -1,14 +1,14 @@
 # Age_by_Voice
 Determining the age of a person by the features of their voice
 
-# Structure
+# Folder Structure
 
 ## Notebooks
 
 All Jupyter notebooks present in this repository attend a unique task, indicated by their name.
 Notebooks "_result" in their name are built for a quick overview for each task (gender- and age estimation).
 
-## Src
+## src
 
 This folder contains a small python libary with additional source code, including:
 - a 3-D plot server for voice clusters
